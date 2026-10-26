@@ -1,0 +1,57 @@
+[package]
+name = "drivemole"
+version = "1.0.0"
+description = "Fast disk analyzer with tree, treemap and sunburst views"
+authors = ["kbcrumbs"]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/kbcrumbs/drivemole"
+homepage = "https://github.com/kbcrumbs/drivemole"
+readme = "../README.md"
+keywords = ["disk-usage", "disk-space", "treemap", "tauri", "visualizer"]
+categories = ["filesystem", "visualization", "gui"]
+# The built frontend (dist/) and generated schemas are gitignored but must ship
+# in the crate so `cargo install drivemole` can build without Node.
+include = [
+    "src/**/*",
+    "build.rs",
+    "tauri.conf.json",
+    "capabilities/**/*",
+    "gen/schemas/**/*",
+    "icons/*.png",
+    "icons/icon.ico",
+    "icons/icon.icns",
+    "dist/**/*",
+]
+
+[lib]
+name = "drivemole_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+# Serve the bundled frontend instead of the Vite dev server. `npm run app:dev`
+# turns this off for hot reloading.
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rayon = "1.10"
+sysinfo = "0.31"
+trash = "5"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

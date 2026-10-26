@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Light theme (RGB channels, used through Tailwind's colour tokens) */
+  --c-app: 241 245 249;
+  --c-panel: 255 255 255;
+  --c-raised: 226 232 240;
+  --c-line: 203 213 225;
+  --c-field: 248 250 252;
+  --c-fg: 15 23 42;
+  --c-muted: 71 85 105;
+  --c-subtle: 100 116 139;
+  --scrollbar-track: #e2e8f0;
+  --scrollbar-thumb: #94a3b8;
+  --scrollbar-thumb-hover: #64748b;
+}
+
+.dark {
+  --c-app: 15 23 42;
+  --c-panel: 30 41 59;
+  --c-raised: 51 65 85;
+  --c-line: 51 65 85;
+  --c-field: 15 23 42;
+  --c-fg: 241 245 249;
+  --c-muted: 148 163 184;
+  --c-subtle: 100 116 139;
+  --scrollbar-track: #1e293b;
+  --scrollbar-thumb: #475569;
+  --scrollbar-thumb-hover: #64748b;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  overflow: hidden;
+  color: rgb(var(--c-fg));
+  background-color: rgb(var(--c-app));
+}
+
+#root {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
