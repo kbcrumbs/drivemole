@@ -62,17 +62,9 @@ cd src-tauri && cargo test
 
 `app:dev` disables the `custom-protocol` Cargo feature so the window loads the Vite dev server. The feature is on by default so that plain `cargo build` and `cargo install` serve the bundled frontend.
 
-### Publishing to crates.io
+### Releasing
 
-The crate ships the built frontend and Tauri's generated permission schemas, so build both first:
-
-```bash
-npm run build        # writes src-tauri/dist
-cd src-tauri
-cargo build          # refreshes gen/schemas
-cargo publish --dry-run
-cargo publish
-```
+Pushing a `v*` tag builds the Windows installers on GitHub Actions and attaches them to a draft release. See [RELEASING.md](RELEASING.md) for the full checklist, crates.io publishing and code signing setup.
 
 ## Tips
 

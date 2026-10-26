@@ -1,0 +1,134 @@
+# Builds the Windows installers for a version tag and attaches them to the
+# GitHub Release. Signing with Azure Artifact Signing turns on automatically
+# once the AZURE_SIGNING_* repository variables are set (see RELEASING.md).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build, e.g. v1.0.0"
+        required: true
+      upload:
+        description: "Attach the builds to the GitHub Release (replacing existing files)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+      UPLOAD: ${{ github.event_name == 'push' || inputs.upload }}
+      SIGN: ${{ vars.AZURE_SIGNING_ENDPOINT != '' }}
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Check the tag matches the app version
+        run: |
+          $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $cargo = (Select-String -Path src-tauri/Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          if ("v$version" -ne $env:TAG -or "v$cargo" -ne $env:TAG) {
+            throw "Tag $env:TAG doesn't match tauri.conf.json ($version) / Cargo.toml ($cargo)"
+          }
+          "VERSION=$version" >> $env:GITHUB_ENV
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check and build the frontend
+        run: npm run build
+
+      - name: Run tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+
+      - name: Install the signing tool
+        if: env.SIGN == 'true'
+        run: cargo install artifact-signing-cli --version 0.12.0 --locked
+
+      - name: Write the signing config
+        if: env.SIGN == 'true'
+        env:
+          ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          PROFILE: ${{ vars.AZURE_SIGNING_PROFILE }}
+        run: |
+          $command = "artifact-signing-cli -e $env:ENDPOINT -a $env:ACCOUNT -c $env:PROFILE -d DriveMole %1"
+          @{ bundle = @{ windows = @{ signCommand = $command } } } |
+            ConvertTo-Json -Depth 5 |
+            Set-Content src-tauri/tauri.signing.conf.json
+
+      - name: Build installers
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        run: |
+          if ($env:SIGN -eq 'true') {
+            npx tauri build --ci --config src-tauri/tauri.signing.conf.json
+          } else {
+            npx tauri build --ci
+          }
+
+      - name: Collect release files
+        run: |
+          $out = New-Item -ItemType Directory -Force release
+          $bundle = "src-tauri/target/release/bundle"
+          Copy-Item "$bundle/nsis/DriveMole_${env:VERSION}_x64-setup.exe" $out
+          Copy-Item "$bundle/msi/DriveMole_${env:VERSION}_x64_en-US.msi" $out
+          Copy-Item "src-tauri/target/release/drivemole.exe" "$out/DriveMole_${env:VERSION}_x64_portable.exe"
+          Get-ChildItem $out | Format-Table Name, Length
+
+      - name: Verify signatures
+        if: env.SIGN == 'true'
+        run: |
+          $bad = Get-ChildItem release | Get-AuthenticodeSignature | Where-Object Status -ne 'Valid'
+          if ($bad) {
+            $bad | Format-Table Path, Status, StatusMessage
+            throw "Some files aren't validly signed"
+          }
+          Get-ChildItem release | Get-AuthenticodeSignature | Format-Table Path, Status, @{ n = 'Signer'; e = { $_.SignerCertificate.Subject } }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: DriveMole-${{ env.TAG }}-windows${{ env.SIGN == 'true' && '-signed' || '' }}
+          path: release/*
+          if-no-files-found: error
+
+      - name: Attach to the GitHub Release
+        if: env.UPLOAD == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view $env:TAG *> $null
+          if ($LASTEXITCODE -ne 0) {
+            # New tags get a draft release so the notes can be written before publishing.
+            gh release create $env:TAG --draft --title "DriveMole $env:TAG" --generate-notes
+          }
+          gh release upload $env:TAG (Get-ChildItem release).FullName --clobber
